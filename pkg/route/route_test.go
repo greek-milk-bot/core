@@ -209,7 +209,7 @@ func TestFilters(t *testing.T) {
 	}
 
 	// 添加过滤器
-	err := receiver.AddFilter("sender", (*Filter[string])(&blockFilter))
+	err := receiver.AddFilter("receiver", (*Filter[string])(&blockFilter))
 	assert.NoError(t, err)
 
 	var receivedCount int
@@ -230,7 +230,7 @@ func TestFilters(t *testing.T) {
 	assert.Equal(t, 1, receivedCount)
 
 	// 移除过滤器
-	err = receiver.RemoveFilter("sender", (*Filter[string])(&blockFilter))
+	err = receiver.RemoveFilter("receiver", (*Filter[string])(&blockFilter))
 	assert.NoError(t, err)
 
 	// 再次发送之前被过滤的消息
@@ -268,14 +268,14 @@ func TestGroupManagement(t *testing.T) {
 
 	// 验证离开组后的状态
 	group1, exists := router.groups.Load("group1")
-	assert.False(t, exists || group1.Contains("route1"))
+	assert.False(t, exists)
 	assert.False(t, route1.groups.Contains("group1"))
 
 	// 删除路由，验证从所有组中移除
 	router.RemoveRoute("route1")
 
 	group2, exists = router.groups.Load("group2")
-	assert.False(t, exists || group2.Contains("route1"))
+	assert.False(t, exists)
 }
 
 // 测试并发操作
