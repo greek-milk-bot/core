@@ -117,7 +117,7 @@ func (g *Bot) evalEvent(plugin *core.PluginInstance, src string, dest string, ev
 }
 
 func (g *Bot) broadCastGroup(packet core.Packet) (map[string]*core.PluginInstance, bool) {
-	var results = make(map[string]*core.PluginInstance)
+	results := make(map[string]*core.PluginInstance)
 	var isGroup bool
 	if packet.Dest == "broadcast" {
 		for id, instance := range g.plugins {
