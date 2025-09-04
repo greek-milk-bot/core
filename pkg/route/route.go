@@ -277,7 +277,7 @@ func (r *Router[T]) Run() {
 
 func (r *Router[T]) handleUnicast(packet RoutePacket[T]) {
 	if destRoute, ok := r.routes.Load(packet.Header.Dest); ok && destRoute.handler != nil {
-		destRoute.handler(packet.Header, packet.Data)
+		go destRoute.handler(packet.Header, packet.Data)
 	}
 }
 
@@ -286,7 +286,7 @@ func (r *Router[T]) handleBroadcast(packet RoutePacket[T]) {
 	r.routes.Range(func(name string, route *Route[T]) bool {
 		// 不向发送者自身广播
 		if name != packet.Header.Src && route.handler != nil {
-			route.handler(packet.Header, packet.Data)
+			go route.handler(packet.Header, packet.Data)
 		}
 		return true
 	})
@@ -299,7 +299,7 @@ func (r *Router[T]) handleMulticast(packet RoutePacket[T]) {
 			// 不向发送者自身组播
 			if memberName != packet.Header.Src {
 				if memberRoute, ok := r.routes.Load(memberName); ok && memberRoute.handler != nil {
-					memberRoute.handler(packet.Header, packet.Data)
+					go memberRoute.handler(packet.Header, packet.Data)
 				}
 			}
 		}

@@ -3,6 +3,7 @@ package route
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -272,7 +273,8 @@ func TestGroupManagement(t *testing.T) {
 	assert.False(t, route1.groups.Contains("group1"))
 
 	// 删除路由，验证从所有组中移除
-	router.RemoveRoute("route1")
+	err := router.RemoveRoute("route1")
+	assert.NoError(t, err)
 
 	group2, exists = router.groups.Load("group2")
 	assert.False(t, exists)
@@ -283,23 +285,28 @@ func TestConcurrentOperations(t *testing.T) {
 	router := NewRouter[string](64)
 	go router.Run()
 	defer router.Stop()
-
+	var count atomic.Int32
 	var wg sync.WaitGroup
-	wg.Add(100)
 
 	// 并发创建路由
 	for i := 0; i < 10; i++ {
+		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			name := fmt.Sprintf("route%d", id)
 			route, err := router.AddRoute(name)
 			assert.NoError(t, err)
 			assert.NotNil(t, route)
+			route.HandlerFunc(func(header RoutePacketHeader, data string) {
+				count.Add(1)
+			})
 		}(i)
 	}
+	wg.Wait()
 
 	// 并发加入组
 	for i := 0; i < 10; i++ {
+		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			name := fmt.Sprintf("route%d", id)
@@ -308,9 +315,11 @@ func TestConcurrentOperations(t *testing.T) {
 			}
 		}(i)
 	}
+	wg.Wait()
 
 	// 并发发送消息
 	for i := 0; i < 80; i++ {
+		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			senderName := fmt.Sprintf("route%d", id%10)
@@ -319,11 +328,12 @@ func TestConcurrentOperations(t *testing.T) {
 			}
 		}(i)
 	}
-
 	wg.Wait()
-
-	// 验证组成员数量
+	// 等待消息处理完毕
 	group, ok := router.groups.Load("concurrent-group")
 	assert.True(t, ok)
 	assert.Equal(t, 10, group.Cardinality())
+	time.Sleep(1000 * time.Millisecond)
+	// 发送 80 次广播 ，广播不会传播到自身 (10 个路由发送 80 次，每次有 9 个其他路由接收到广播)
+	assert.Equal(t, 720, int(count.Load()))
 }
