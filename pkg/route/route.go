@@ -13,8 +13,9 @@ type Router[T any] struct {
 	defaultTtl uint8 // 默认TTL值
 	routes     *utils.Map[string, *Route[T]]
 	messages   chan RoutePacket[T]
-	groups     *utils.Map[string, mapset.Set[string]]                           // 组-成员映射
-	filter     *utils.Map[string, *utils.Map[string, *utils.Array[*Filter[T]]]] // 过滤器
+	groups     *utils.Map[string, mapset.Set[string]]
+	// 组-成员映射
+	filter *utils.Map[string, *utils.Map[string, *utils.Array[*Filter[T]]]] // 过滤器
 
 	once sync.Once
 }
@@ -81,35 +82,26 @@ func (r *Router[T]) RemoveRoute(name string) error {
 	if !ok {
 		return fmt.Errorf("route %s not found", name)
 	}
-
-	// 第一步：遍历所有 pattern，删除该路由的过滤器条目，收集需检查的 pattern
 	var emptyPatternCandidates []string
 	r.filter.Range(func(pattern string, innerMap *utils.Map[string, *utils.Array[*Filter[T]]]) bool {
-		// 删除内层 Map 中该路由的过滤器条目
 		deleted := innerMap.RemoveIf(name, func(arr *utils.Array[*Filter[T]]) bool {
-			return true // 无论数组是否为空，都删除该路由的条目
+			return true
 		})
-		// 若删除了条目，标记该 pattern 需后续检查是否为空
 		if deleted {
 			emptyPatternCandidates = append(emptyPatternCandidates, pattern)
 		}
-		return true // 继续遍历所有 pattern
+		return true
 	})
 
-	// 第二步：检查收集的 pattern，若 innerMap 为空则删除
 	for _, pattern := range emptyPatternCandidates {
-		// 重新加载 innerMap（避免 Range 中引用失效）
 		innerMap, ok := r.filter.Load(pattern)
 		if !ok {
 			continue
 		}
-		// 若 innerMap 为空，删除该 pattern
 		if innerMap.Len() == 0 {
 			r.filter.LoadAndDelete(pattern)
 		}
 	}
-
-	// 从所有组中移除
 	for _, group := range item.groups.ToSlice() {
 		item.LeaveGroup(group)
 	}
@@ -186,15 +178,18 @@ func (r *Route[T]) SendGroup(group string, message T) {
 }
 
 // 加入组
-func (r *Route[T]) JoinGroup(group string) {
+func (r *Route[T]) JoinGroup(group string) error {
 	// 将路由自身添加到组的成员集合
+	_, ok := r.router.routes.Load(r.name)
+	if !ok {
+		return fmt.Errorf("route %s not found", r.name)
+	}
 	groupSet, _ := r.router.groups.LoadOrStore(group, mapset.NewSet[string]())
 	groupSet.Add(r.name)
-	// 记录路由加入的组
 	r.groups.Add(group)
+	return nil
 }
 
-// 离开组
 func (r *Route[T]) LeaveGroup(group string) {
 	if groupSet, found := r.router.groups.Load(group); found {
 		groupSet.Remove(r.name)
